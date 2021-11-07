@@ -114,7 +114,8 @@ class ProcessManager:
     state: str
     manager: Any
 
-    def __init__(self):
+    def __init__(self, name):
+        self.name = name
         self.processstate = None
         self.manager = Manager()
 
@@ -130,40 +131,35 @@ class ProcessManager:
         # print("Setting state", id(self.state), self.state)
         print(f"On {os.getpid()}, {id(self)} {id(self.state)} Setting state from {self.state} to {id(value)} {value}")
         self.state = value
+    
+    def getstatus(self):
+        status = {
+            "worker": self.name,
+            "alive": self.worker.is_alive(),
+            "state": self.processstate['state']
+        }
+        status.update(dict(self.processstate))
+        return status
 
-    def exec(self, name, api, m: Model, e: Event):
+    def exec(self, api, m: Model, e: Event):
         context = Context("test", api)
         self.processstate = self.manager.dict()
         self.processstate["state"] = 0
         self.processstate["context"] = context
         self.processstate["model"] = m
-        self.worker = ProcessWorker(name=name, api=api, shared_dict=self.processstate)
+        self.worker = ProcessWorker(name=self.name, api=api, shared_dict=self.processstate)
         self.worker.start()
         # self.process = Process(target=run, args=(model, context, e,d))
         # self.process.start()
         # self.run(context)
         # self.p.join()
 
-def run(localmodel, c, e, d):
-    global model
-    m = d['model']
-    print(f"model: {m}")
-    m.state = "started"
-    # print("thread", m.name, id(m))
-    # m.setstate(1)
-    # print("thread", m.getstate())
-    # sleep(1)
-    # m.setstate(2)
-    # print("thread", m.getstate())
-    # sleep(1)
-    # m.setstate(3)
-    # print("thread", m.getstate())
 
-def run_basic_process():
-    ifc = IFC("smell", ("admin", "pass"))
-    model = Model("base " + str(datetime.now()), ifc)
-    pm = ProcessManager()
-    pm.exec("processname", ifc, model, Event("eventid"))
+def run_basic_process(name):
+    ifc = IFC("hosturl", ("admin", "pass"))
+    model = Model(f"{name} {str(datetime.now())}", ifc)
+    pm = ProcessManager(name)
+    pm.exec(ifc, model, Event("eventid"))
     return pm
 
 # print("main", id(model), model)
@@ -180,20 +176,46 @@ from flask import Flask, g
 
 app = Flask("main")
 
+app_context = {}
+
 @app.route("/")
 def index():
     return "Server Running"
 
 @app.route("/start")
-def start():
-    global pm
-    pm = run_basic_process()
-    g.pm = pm
-    return "Server Running"
+@app.route("/start/<name>")
+def start(name="default"):
+    global app_context
+    if name not in app_context:
+        app_context[name] = run_basic_process(name)
+        return f"Server create and started {name}"
+    else:
+        return f"Server not started as one exists {name}"
+
+@app.route("/remove")
+@app.route("/remove/<name>")
+def remove(name="default"):
+    global app_context
+    if name in app_context:
+        status = app_context[name].getstatus()
+        if not status['alive']:
+            app_context[name].worker.close()
+            del app_context[name]
+            return f"worker {name} removed"
+        else:
+            return f"worker {name} not removed as still running"
+    else:
+        return f"worker {name} not found"
+
 
 @app.route("/status")
-def status():
-    global pm
-    return f"State: {pm.processstate['state']}"
+@app.route("/status/<name>")
+def status(name="default"):
+    global app_context
+    status = None
+    if name in app_context:
+        status = app_context[name].getstatus()
+
+    return f"State for {status}"
 
 app.run()
