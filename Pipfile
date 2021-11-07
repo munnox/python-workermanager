@@ -1,0 +1,26 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+flask = "*"
+requests = "*"
+
+[dev-packages]
+pre-commit = ">=2.15.0"
+isort = "*"
+black = "*"
+pytest = "*"
+flake8 = "*"
+pylint = "*"
+mypy = "*"
+pytest-cov = "*"
+types-pyyaml = "*"
+pipenv-setup = "*"
+
+[requires]
+python_version = "3.8"
+
+[pipenv]
+allow_prereleases = true
