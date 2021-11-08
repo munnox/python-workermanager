@@ -58,9 +58,9 @@ class Context:
     #         self.state = value
 
 
-class Model:
+class Unit:
+    """Class to define a Unit of Work Element."""
     name: str
-    ifc: IFC
     state: str
 
     onUpdate: Callable[[Any], Any]
@@ -73,23 +73,32 @@ class Model:
     def update(self):
         self.onUpdate(self)
 
-    def getstatus(self):
+    def getstatusdict(self):
+        """Build a status dict for the unit of work."""
         return {"state": self.state}
 
     def process(self, context):
         for i in range(60):
             self.state = self.state + 1
             self.update()
-            print(f"State: {self.state}")
+            print(f"From Unit of Work State: {self.state}")
             sleep(1)
 
         return context
 
 
 class ProcessWorker(Process):
-    def __init__(self, name, model, context, shared_dict):
+    """A process worker to allow to Orcestrate the worker process.
+    
+    The main contract in this work is that the Unit of work need two methods:
+
+    * process(self, Context) -> Context
+    * getstatusdict(self) -> Dict[str, Any]
+
+    """
+    def __init__(self, name, unit, context, shared_dict):
         self.name = name
-        self.model = model
+        self.unit = unit
         self.context = context
         self.shared_dict = shared_dict
         super().__init__()
@@ -98,43 +107,36 @@ class ProcessWorker(Process):
         """Allowing simple one time initialisation."""
         pass
 
+    def add_update(self):
+        def update(unit):
+            # print(f"Update status: {unit}")
+            # print(
+            #     f"On {os.getpid()}, {id(self)} {id(self.state)} Getting state from {self.state}"
+            # )
+            self.shared_dict.update(unit.getstatusdict())
+
+        self.unit.onUpdate = update
+
     def run(self):
         self.worker_initialisation()
 
-        def update(model):
-            print(f"set state: {model}")
-            # self.shared_dict["state"] = model.state
-            self.shared_dict.update(model.getstatus())
+        self.add_update()
 
-        self.model.onUpdate = update
-        self.model.process(self.context)
+        self.unit.process(self.context)
 
-        print(f"Shared class: {self.shared_dict}")
+        print(f"Shared dict: {self.shared_dict}")
 
 
 class ProcessManager:
+    """A Process manager to schedual a worker with a Unit of Work."""
     worker: ProcessWorker
     process_state: Any
-    state: str
     manager: Any
 
     def __init__(self, name):
         self.name = name
         self.process_state = None
         self.manager = Manager()
-
-    # def getstate(self):
-    #     print(
-    #         f"On {os.getpid()}, {id(self)} {id(self.state)} Getting state from {self.state}"
-    #     )
-    #     local_state = self.state
-    #     return local_state
-
-    # def setstate(self, value):
-    #     print(
-    #         f"On {os.getpid()}, {id(self)} {id(self.state)} Setting state from {self.state} to {id(value)} {value}"
-    #     )
-    #     self.state = value
 
     def getstatus(self):
         status = {
@@ -144,66 +146,72 @@ class ProcessManager:
         status.update(dict(self.process_state))
         return status
 
-    def exec(self, context, model: Model, event: Event):
+    def define(self, context, unit: Unit, event: Event):
         self.process_state = self.manager.dict()
         self.process_state["event"] = event
         # self.process_state["state"] = 0
         # self.process_state["context"] = context
         # self.process_state["model"] = model
         self.worker = ProcessWorker(
-            name=self.name, context=context, model=model, shared_dict=self.process_state
+            name=self.name, context=context, unit=unit, shared_dict=self.process_state
         )
+    
+    def execute(self):
         self.worker.start()
 
 
 def run_basic_process(name):
     ifc = IFC("hosturl", ("admin", "pass"))
-    model = Model(f"{name} {str(datetime.now())}", ifc)
+    unit = Unit(f"{name} {str(datetime.now())}", ifc)
     pm = ProcessManager(name)
     context = Context("test", ifc)
-    pm.exec(context, model, Event("eventid"))
+    pm.define(context, unit, Event("eventid"))
+    pm.execute()
     return pm
 
 
-# TODO need to add a join for the process maybe
-# pm.worker.join()
 
+# TODO This a flask service build a blueprint
 from flask import Flask, g, Blueprint
-
 
 app_context = {}
 
 worker_api = Blueprint("worker_api", __name__, template_folder="templates")
 
-
 @worker_api.route("/")
 def index():
-    return "Server Running"
+    # TODO Create a simple UI to display debug information
+    return "Worker Server Running"
 
 
 @worker_api.route("/start")
 @worker_api.route("/start/<name>")
 def start(name="default"):
+    """Start a worker process on a given unit of work."""
     global app_context
     if name not in app_context:
         app_context[name] = run_basic_process(name)
-        return f"Server create and started {name}"
+        return f"Unit of work {name} create and started."
     else:
-        return f"Server not started as one exists {name}"
+        return f"Unit of work {name} not started as one exists."
+
+
+# TODO Add a stop function to request/force a worker and unit of work to stop
 
 
 @worker_api.route("/remove")
 @worker_api.route("/remove/<name>")
 def remove(name="default"):
+    """Remove A dead worker process."""
     global app_context
     if name in app_context:
         status = app_context[name].getstatus()
         if not status["alive"]:
             app_context[name].worker.close()
             del app_context[name]
-            return f"worker {name} removed"
+            return f"Worker {name} removed"
         else:
-            return f"worker {name} not removed as still running"
+            return f"Worker {name} not removed as still running"
     else:
         return f"worker {name} not found"
 
@@ -211,15 +219,19 @@ def remove(name="default"):
 @worker_api.route("/status")
 @worker_api.route("/status/<name>")
 def status(name="default"):
+    """Retreive the status of a worker process."""
     global app_context
     status = None
     if name in app_context:
         status = app_context[name].getstatus()
 
-    return f"State for {status}"
+    # TODO Convert to json object for better M2M access
+    return f"Return State for {status}"
 
+# Run the worker service on a flask
 
-app = Flask("main")
-app.register_blueprint(worker_api)
+if __name__ == "__main__":
+    app = Flask("main")
+    app.register_blueprint(worker_api)
 
-app.run()
+    app.run()
