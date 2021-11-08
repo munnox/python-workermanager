@@ -8,7 +8,7 @@ Planning to clean this up and improve a async long running process.
 Author: Robert Munnoch
 """
 from multiprocessing import Process, Lock
-from typing import Any, Tuple
+from typing import Any, Callable, Tuple
 from time import sleep
 from datetime import datetime
 import os
@@ -63,145 +63,126 @@ class Model:
     ifc: IFC
     state: str
 
+    onUpdate: Callable[[Any], Any]
+
     def __init__(self, name, ifc):
         self.name = name
         self.ifc = ifc
         self.state = 0
-        # self._lock = Lock()
-        # self.p = None
 
-    def setstate(self, state):
-        self.state = state
+    def update(self):
+        self.onUpdate(self)
+
+    def getstatus(self):
+        return {"state": self.state}
 
     def process(self, context):
         for i in range(60):
-            context.state = context.state + 1
-            self.setstate(context.state)
-            print(f"State: {context.state}")
+            self.state = self.state + 1
+            self.update()
+            print(f"State: {self.state}")
             sleep(1)
 
         return context
 
-    # def getstate(self):
-    #     with self._lock:
-    #         print(f"On {os.getpid()}, {id(self)} {id(self.state)} Getting state {self.state}")
-    #         local_state = self.state
-    #     return local_state
-
-    # def setstate(self, value):
-    #     with self._lock:
-    #         print(f"On {os.getpid()}, {id(self)} {id(self.state)} Setting state from {self.state} to {id(value)} {value}")
-    #         self.state = value
-
-    # def exec(self, e: Event):
-    #     context = Context("test", self.ifc)
-    #     self.p = Process(target=run, args=(self, context, e))
-    #     self.p.start()
-    #     # self.run(context)
-    #     # self.p.join()
-
 
 class ProcessWorker(Process):
-    def __init__(self, name, api, shared_dict):
+    def __init__(self, name, model, context, shared_dict):
         self.name = name
-        self.api = api
+        self.model = model
+        self.context = context
         self.shared_dict = shared_dict
         super().__init__()
 
+    def worker_initialisation(self):
+        """Allowing simple one time initialisation."""
+        pass
+
     def run(self):
-        context = Context("testid", self.api)
-        m = Model(self.name, self.api)
+        self.worker_initialisation()
 
-        def setstate(state):
-            print(f"set state: {state}")
-            self.shared_dict["state"] = state
+        def update(model):
+            print(f"set state: {model}")
+            # self.shared_dict["state"] = model.state
+            self.shared_dict.update(model.getstatus())
 
-        m.setstate = setstate
-        m.process(context)
+        self.model.onUpdate = update
+        self.model.process(self.context)
 
-        print(f"Shared class: {self.shared_dict}")
-        # self.c.settest("other test")
         print(f"Shared class: {self.shared_dict}")
 
 
 class ProcessManager:
     worker: ProcessWorker
-    processstate: Any
+    process_state: Any
     state: str
     manager: Any
 
     def __init__(self, name):
         self.name = name
-        self.processstate = None
+        self.process_state = None
         self.manager = Manager()
 
-    def getstate(self):
-        # with self._lock:
-        # print("Getting state", id(self.state), self.state)
-        print(
-            f"On {os.getpid()}, {id(self)} {id(self.state)} Getting state from {self.state}"
-        )
-        local_state = self.state
-        return local_state
+    # def getstate(self):
+    #     print(
+    #         f"On {os.getpid()}, {id(self)} {id(self.state)} Getting state from {self.state}"
+    #     )
+    #     local_state = self.state
+    #     return local_state
 
-    def setstate(self, value):
-        # with self._lock:
-        # print("Setting state", id(self.state), self.state)
-        print(
-            f"On {os.getpid()}, {id(self)} {id(self.state)} Setting state from {self.state} to {id(value)} {value}"
-        )
-        self.state = value
+    # def setstate(self, value):
+    #     print(
+    #         f"On {os.getpid()}, {id(self)} {id(self.state)} Setting state from {self.state} to {id(value)} {value}"
+    #     )
+    #     self.state = value
 
     def getstatus(self):
         status = {
             "worker": self.name,
             "alive": self.worker.is_alive(),
-            "state": self.processstate["state"],
         }
-        status.update(dict(self.processstate))
+        status.update(dict(self.process_state))
         return status
 
-    def exec(self, api, m: Model, e: Event):
-        context = Context("test", api)
-        self.processstate = self.manager.dict()
-        self.processstate["state"] = 0
-        self.processstate["context"] = context
-        self.processstate["model"] = m
+    def exec(self, context, model: Model, event: Event):
+        self.process_state = self.manager.dict()
+        self.process_state["event"] = event
+        # self.process_state["state"] = 0
+        # self.process_state["context"] = context
+        # self.process_state["model"] = model
         self.worker = ProcessWorker(
-            name=self.name, api=api, shared_dict=self.processstate
+            name=self.name, context=context, model=model, shared_dict=self.process_state
         )
         self.worker.start()
-        # self.process = Process(target=run, args=(model, context, e,d))
-        # self.process.start()
-        # self.run(context)
-        # self.p.join()
 
 
 def run_basic_process(name):
     ifc = IFC("hosturl", ("admin", "pass"))
     model = Model(f"{name} {str(datetime.now())}", ifc)
     pm = ProcessManager(name)
-    pm.exec(ifc, model, Event("eventid"))
+    context = Context("test", ifc)
+    pm.exec(context, model, Event("eventid"))
     return pm
 
 
 # TODO need to add a join for the process maybe
 # pm.worker.join()
 
-from flask import Flask, g
+from flask import Flask, g, Blueprint
 
-app = Flask("main")
 
 app_context = {}
 
+worker_api = Blueprint("worker_api", __name__, template_folder="templates")
 
-@app.route("/")
+
+@worker_api.route("/")
 def index():
     return "Server Running"
 
 
-@app.route("/start")
-@app.route("/start/<name>")
+@worker_api.route("/start")
+@worker_api.route("/start/<name>")
 def start(name="default"):
     global app_context
     if name not in app_context:
@@ -211,8 +192,8 @@ def start(name="default"):
         return f"Server not started as one exists {name}"
 
 
-@app.route("/remove")
-@app.route("/remove/<name>")
+@worker_api.route("/remove")
+@worker_api.route("/remove/<name>")
 def remove(name="default"):
     global app_context
     if name in app_context:
@@ -227,8 +208,8 @@ def remove(name="default"):
         return f"worker {name} not found"
 
 
-@app.route("/status")
-@app.route("/status/<name>")
+@worker_api.route("/status")
+@worker_api.route("/status/<name>")
 def status(name="default"):
     global app_context
     status = None
@@ -237,5 +218,8 @@ def status(name="default"):
 
     return f"State for {status}"
 
+
+app = Flask("main")
+app.register_blueprint(worker_api)
 
 app.run()
