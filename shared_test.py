@@ -1,8 +1,8 @@
-from multiprocessing import Value, Array, Lock
+import base64
+import pickle
+from multiprocessing import Array, Lock, Value
 from multiprocessing.context import Process
 from typing import ClassVar, Type, TypeVar
-import pickle
-import base64
 
 _T = TypeVar("_T")
 

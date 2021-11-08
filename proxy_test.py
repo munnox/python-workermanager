@@ -1,7 +1,6 @@
-from multiprocessing import Process, Queue
 import multiprocessing.managers as m
+from multiprocessing import Manager, Process, Queue
 from multiprocessing.managers import BaseManager
-from multiprocessing import Manager
 
 
 class MyManager(BaseManager):
