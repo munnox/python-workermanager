@@ -7,12 +7,13 @@ Planning to clean this up and improve a async long running process.
 
 Author: Robert Munnoch
 """
-from multiprocessing import Process, Lock
-from typing import Any, Callable, Tuple
-from time import sleep
-from datetime import datetime
 import os
-from multiprocessing import Manager
+from datetime import datetime
+from multiprocessing import Lock, Manager, Process
+from time import sleep
+from typing import Any, Callable, Tuple
+
+import requests
 
 
 class IFC:
@@ -25,9 +26,13 @@ class IFC:
         self.host = host
         self.auth = auth
 
+    def get(self, url):
+        """Simple request."""
+        return requests.get(url, auth=self.auth)
+
 
 class Event:
-    """Event"""
+    """Event Class for an run instance."""
 
     id: str
 
@@ -36,31 +41,21 @@ class Event:
 
 
 class Context:
+    """The Run context of the Units main process."""
+
     id: str
     ifc: IFC
-    state: str = None
 
     def __init__(self, id, ifc):
         self.id = id
         self.ifc = ifc
-        self.state = 0
-        # self._lock = Lock()
-
-    # def getstate(self):
-    #     with self._lock:
-    #         print("getting state", id(self.state), self.state)
-    #         local_state = self.state
-    #     return local_state
-
-    # def setstate(self, value):
-    #     with self._lock:
-    #         print("setting state", id(self.state), self.state)
-    #         self.state = value
 
 
 class Unit:
     """Class to define a Unit of Work Element."""
+
     name: str
+    ifc: IFC
     state: str
 
     onUpdate: Callable[[Any], Any]
@@ -84,11 +79,15 @@ class Unit:
             print(f"From Unit of Work State: {self.state}")
             sleep(1)
 
+            if self.state == 10:
+                print(context.ifc.get("https://example.com"))
+                print(self.ifc.get("https://example.com"))
+
         return context
 
 
 class ProcessWorker(Process):
-    """A process worker to allow to Orcestrate the worker process.
+    """A process worker to allow to Orchestrate the worker process.
     
     The main contract in this work is that the Unit of work need two methods:
 
@@ -96,6 +95,7 @@ class ProcessWorker(Process):
     * getstatusdict(self) -> Dict[str, Any]
 
     """
+
     def __init__(self, name, unit, context, shared_dict):
         self.name = name
         self.unit = unit
@@ -108,6 +108,8 @@ class ProcessWorker(Process):
         pass
 
     def add_update(self):
+        """Helper to add the shared status update for the model."""
+
         def update(unit):
             # print(f"Update status: {unit}")
             # print(
@@ -118,6 +120,7 @@ class ProcessWorker(Process):
         self.unit.onUpdate = update
 
     def run(self):
+        """Run the defined unit of work."""
         self.worker_initialisation()
 
         self.add_update()
@@ -129,6 +132,7 @@ class ProcessWorker(Process):
 
 class ProcessManager:
     """A Process manager to schedual a worker with a Unit of Work."""
+
     worker: ProcessWorker
     process_state: Any
     manager: Any
@@ -139,6 +143,7 @@ class ProcessManager:
         self.manager = Manager()
 
     def getstatus(self):
+        """For a summary of the Worker and the unit of work."""
         status = {
             "worker": self.name,
             "alive": self.worker.is_alive(),
@@ -147,6 +152,7 @@ class ProcessManager:
         return status
 
     def define(self, context, unit: Unit, event: Event):
+        """Define the process for the worker and the unit of work."""
         self.process_state = self.manager.dict()
         self.process_state["event"] = event
         # self.process_state["state"] = 0
@@ -155,8 +161,9 @@ class ProcessManager:
         self.worker = ProcessWorker(
             name=self.name, context=context, unit=unit, shared_dict=self.process_state
         )
-    
+
     def execute(self):
+        """Start the defined unit of work."""
         self.worker.start()
 
 
@@ -170,13 +177,13 @@ def run_basic_process(name):
     return pm
 
 
-
 # TODO This a flask service build a blueprint
-from flask import Flask, g, Blueprint
+from flask import Blueprint, Flask, g
 
 app_context = {}
 
 worker_api = Blueprint("worker_api", __name__, template_folder="templates")
+
 
 @worker_api.route("/")
 def index():
@@ -227,6 +234,7 @@ def status(name="default"):
 
     # TODO Convert to json object for better M2M access
     return f"Return State for {status}"
+
 
 # Run the worker service on a flask
 
