@@ -284,12 +284,13 @@ pm = ProcessManager("main")
 
 def get_blueprint(pm):
     # global pm
-    worker_api = Blueprint("worker_api", __name__, template_folder="templates")
+    worker_api = Blueprint("worker_api", __name__, template_folder="templates", static_folder="./")
 
     @worker_api.route("/")
     def index():
         # TODO Create a simple UI to display debug information
-        return "Worker Server Running"
+        # return "Worker Server Running"
+        return worker_api.send_static_file("index.html")
 
     @worker_api.route("/start")
     @worker_api.route("/start/<name>")
@@ -300,14 +301,14 @@ def get_blueprint(pm):
         unit = Unit(f"{name} {str(datetime.now())}", ifc)
         # pm = ProcessManager(name, process_state)
         context = Context("test", Event("eventid"))
-        pm.define(name, context, unit)
-        pm.execute(name)
+        if pm.define(name, context, unit):
+            pm.execute(name)
         # run_basic_process(name, pm)
         # print(f"PM : {pm} {pm.workers}")
         # app_context[name] = pm.worker
-        return jsonify({"message": f"Unit of work {name} create and started."})
-        # else:
-        #     return f"Unit of work {name} not started as one exists."
+            return jsonify({"message": f"Unit of work {name} create and started."})
+        else:
+            return jsonify({"message": f"Unit of work {name} not started as one exists."})
 
     # TODO Add a stop function to request/force a worker and unit of work to stop
 

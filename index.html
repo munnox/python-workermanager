@@ -1,0 +1,95 @@
+<html>
+
+<head>
+    <script src="https://unpkg.com/vue@3.2.4/dist/vue.global.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+</head>
+
+<body>
+    Worker Server Running
+    <div id="counter">
+        Counter: {{ counter }}
+        <input v-model="name" />
+        <div>
+            <button v-on:click="start(name)">Execute</button>
+            <button v-on:click="getstate(name)">Get State</button>
+            <button v-on:click="remove(name)">Remove</button>
+        </div>
+        <div>State:</div>
+        <div>{{state}}</div>
+    </div>
+
+    <script>
+        const Counter = {
+            data() {
+                return {
+                    counter: 0,
+                    state: {},
+                    name: "default"
+                }
+            },
+            mounted() {
+                setInterval(() => {
+                    this.counter++
+                }, 1000)
+            },
+            methods: {
+                start: function (name) {
+                    var self = this;
+                    // Make a request for a user with a given ID
+                    axios.get(`/start/${name}`)
+                        .then(function (response) {
+                            // handle success
+                            console.log(response);
+                            self.state = response.data
+                        })
+                        .catch(function (error) {
+                            // handle error
+                            console.log(error);
+                        })
+                        .then(function () {
+                            // always executed
+                        });
+                },
+                getstate: function (name) {
+                    var self = this;
+                    // Make a request for a user with a given ID
+                    axios.get(`/status/${name}`)
+                        .then(function (response) {
+                            // handle success
+                            console.log(response);
+                            self.state = response.data
+                        })
+                        .catch(function (error) {
+                            // handle error
+                            console.log(error);
+                        })
+                        .then(function () {
+                            // always executed
+                        });
+                },
+                remove: function (name) {
+                    var self = this;
+                    // Make a request for a user with a given ID
+                    axios.get(`/remove/${name}`)
+                        .then(function (response) {
+                            // handle success
+                            console.log(response);
+                            self.state = response.data
+                        })
+                        .catch(function (error) {
+                            // handle error
+                            console.log(error);
+                        })
+                        .then(function () {
+                            // always executed
+                        });
+                }
+            }
+        }
+        Vue.createApp(Counter).mount('#counter')
+    </script>
+</body>
+
+
+</html>
