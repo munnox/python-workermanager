@@ -18,6 +18,7 @@ mypy = "*"
 pytest-cov = "*"
 types-pyyaml = "*"
 pipenv-setup = "*"
+uwsgi = "*"
 
 [requires]
 python_version = "3.8"
