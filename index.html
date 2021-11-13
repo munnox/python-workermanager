@@ -9,6 +9,12 @@
     Worker Server Running
     <div id="counter">
         Counter: {{ counter }}
+        <div>
+            <button v-on:click="getworkers()">Get workers</button>
+        </div>
+        <div>
+            {{ workers }}
+        </div>
         <input v-model="name" />
         <div>
             <button v-on:click="start(name)">Execute</button>
@@ -24,6 +30,7 @@
             data() {
                 return {
                     counter: 0,
+                    workers: {},
                     state: {},
                     name: "default"
                 }
@@ -84,7 +91,24 @@
                         .then(function () {
                             // always executed
                         });
-                }
+                },
+                getworkers: function () {
+                    var self = this;
+                    // Make a request for a user with a given ID
+                    axios.get(`/workers`)
+                        .then(function (response) {
+                            // handle success
+                            console.log(response);
+                            self.workers = response.data
+                        })
+                        .catch(function (error) {
+                            // handle error
+                            console.log(error);
+                        })
+                        .then(function () {
+                            // always executed
+                        });
+                },
             }
         }
         Vue.createApp(Counter).mount('#counter')

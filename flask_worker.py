@@ -203,6 +203,9 @@ class ProcessManager:
         # workers and units of work
         self.process_state = self.manager.dict()
 
+    def get_workers(self):
+        return {k: {"alive": self.workers[k].is_alive()} for k in list(self.workers.keys())}
+
     def get_status(self, name):
         """For a summary of the Worker and the unit of work."""
         # print(self.workers)
@@ -231,26 +234,23 @@ class ProcessManager:
         # self.process_state["context"] = context
         # self.process_state["model"] = model
         if name not in self.workers:
-            self.process_state[name] = self.manager.dict()
-            self.workers[name] = ProcessWorker(
-                name=self.name,
-                context=context,
-                unit=unit,
-                shared_dict=self.process_state[name],
-            )
+            self._create_worker(name, context, unit)
             return True
         else:
             if not self.workers[name].is_alive():
-                self.process_state[name] = self.manager.dict()
-                self.workers[name] = ProcessWorker(
-                    name=self.name,
-                    context=context,
-                    unit=unit,
-                    shared_dict=self.process_state[name],
-                )
+                self._create_worker(name, context, unit)
                 return True
             else:
                 return False
+
+    def _create_worker(self, name, context, unit):
+        self.process_state[name] = self.manager.dict()
+        self.workers[name] = ProcessWorker(
+            name=self.name,
+            context=context,
+            unit=unit,
+            shared_dict=self.process_state[name],
+        )
 
     def remove(self, name):
         if name in self.workers:
@@ -331,6 +331,19 @@ def get_blueprint(pm):
         # TODO Convert to json object for better M2M access
         return jsonify(
             {"message": f"Return State for {status}", "status": dict(status)}
+        )
+
+    @worker_api.route("/workers")
+    def workers():
+        """Retreive the list of the workers."""
+        global pm
+        # print("pm: ", pm.workers)
+        workers = pm.get_workers()
+        # sleep(0.1)
+
+        # TODO Convert to json object for better M2M access
+        return jsonify(
+            {"message": f"Return worker list for {pm.name}", "workers": workers}
         )
 
     return worker_api
