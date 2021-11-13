@@ -3,26 +3,44 @@
 <head>
     <script src="https://unpkg.com/vue@3.2.4/dist/vue.global.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <style>
+        body {
+            color: white;
+            background-color: rgb(34, 33, 33);
+        }
+
+        .workers {
+            margin-top: 20px;
+        }
+
+        .worker {
+            margin-top: 20px;
+        }
+    </style>
 </head>
 
 <body>
     Worker Server Running
     <div id="counter">
         Counter: {{ counter }}
-        <div>
-            <button v-on:click="getworkers()">Get workers</button>
+        <div class="workers">
+            <div>
+                <button v-on:click="getworkers()">Get workers</button>
+            </div>
+            <div>
+                {{ workers }}
+            </div>
         </div>
-        <div>
-            {{ workers }}
+        <div class="worker">
+            <input v-model="name" />
+            <div>
+                <button v-on:click="start(name)">Execute</button>
+                <button v-on:click="getstate(name)">Get State</button>
+                <button v-on:click="remove(name)">Remove</button>
+            </div>
+            <div>State:</div>
+            <div>{{state}}</div>
         </div>
-        <input v-model="name" />
-        <div>
-            <button v-on:click="start(name)">Execute</button>
-            <button v-on:click="getstate(name)">Get State</button>
-            <button v-on:click="remove(name)">Remove</button>
-        </div>
-        <div>State:</div>
-        <div>{{state}}</div>
     </div>
 
     <script>
