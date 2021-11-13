@@ -28,7 +28,7 @@
                 <button v-on:click="getworkers()">Get workers</button>
             </div>
             <div>
-                {{ workers }}
+                <pre>{{ JSON.stringify(workers, null, 2) }}</pre>
             </div>
         </div>
         <div class="worker">
@@ -39,11 +39,19 @@
                 <button v-on:click="remove(name)">Remove</button>
             </div>
             <div>State:</div>
-            <div>{{state}}</div>
+            <pre>{{ JSON.stringify(state, null, 2) }}</pre>
         </div>
     </div>
 
     <script>
+        var WorkerState = {
+            DEFINED: 1,
+            RUNNING: 2,
+        }
+        var ResultState = {
+            CREATED: 0,
+            NOTCREATED: 1
+        }
         const Counter = {
             data() {
                 return {
@@ -67,6 +75,7 @@
                             // handle success
                             console.log(response);
                             self.state = response.data
+                            // self.state.
                         })
                         .catch(function (error) {
                             // handle error

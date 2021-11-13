@@ -43,7 +43,8 @@ from datetime import datetime
 from multiprocessing import Lock, Manager, Process
 from multiprocessing.process import AuthenticationString
 from time import sleep
-from typing import Any, Callable, Tuple
+from typing import Any, Callable, Dict, Tuple
+from enum import Enum, auto, Flag
 
 import requests
 
@@ -180,6 +181,16 @@ class ProcessWorker(Process):
         self.__dict__.update(state)
 
 
+class WorkerState(Flag):
+    DEFINED = auto()
+    RUNNING = auto()
+
+
+class ResultState(Enum):
+    CREATED = auto()
+    NOTCREATED = auto()
+
+
 class ProcessManager:
     """A Process manager to schedual a worker with a Unit of Work."""
 
@@ -204,46 +215,56 @@ class ProcessManager:
         self.process_state = self.manager.dict()
 
     def get_workers(self):
-        return {k: {"alive": self.workers[k].is_alive()} for k in list(self.workers.keys())}
+        return {
+            k: {"defined": self.isdefined(k), "alive": self.isrunning(k)}
+            for k in list(self.workers.keys())
+        }
 
     def get_status(self, name):
         """For a summary of the Worker and the unit of work."""
         # print(self.workers)
+        status = {
+            "nid": name,
+            "manager": self.name,
+            "pid": os.getpid(),
+            "alive": False,
+            "defined": False,
+        }
         if name in self.workers:
-            status = {
-                "nid": name,
-                "manager": self.name,
-                "alive": self.workers[name].is_alive(),
-                "defined": True,
-            }
+            status.update(
+                {"alive": self.workers[name].is_alive(), "defined": True,}
+            )
             status.update(dict(self.process_state[name]))
-        else:
-            status = {
-                "nid": name,
-                "manager": self.name,
-                "alive": False,
-                "defined": False,
-            }
         return status
 
-    def define(self, name, context, unit: Unit):
-        """Define the process for the worker and the unit of work."""
-        # self.process_state = self.manager.dict()
-        # self.process_state["event"] = event
-        # self.process_state["state"] = 0
-        # self.process_state["context"] = context
-        # self.process_state["model"] = model
-        if name not in self.workers:
-            self._create_worker(name, context, unit)
-            return True
-        else:
-            if not self.workers[name].is_alive():
-                self._create_worker(name, context, unit)
-                return True
-            else:
-                return False
+    def isdefined(self, name):
+        return name in self.workers
 
-    def _create_worker(self, name, context, unit):
+    def isrunning(self, name):
+        return self.isdefined(name) and self.workers[name].is_alive()
+
+    def define(self, name: str, context: Context, unit: Unit):
+        """Define the process for the worker and the unit of work."""
+        result = {
+            "pid": os.getpid(),
+            "state": ResultState.CREATED.name,
+            "message": f"Unit of work {name} create and started.",
+        }
+        if not self.isdefined(name):
+            self._create_worker(name, context, unit)
+        else:
+            if not self.isrunning(name):
+                self._create_worker(name, context, unit)
+            else:
+                result.update(
+                    {
+                        "state": ResultState.NOTCREATED.name,
+                        "message": f"Unit of work {name} not started as one exists.",
+                    }
+                )
+        return result
+
+    def _create_worker(self, name: str, context: Context, unit: Context):
         self.process_state[name] = self.manager.dict()
         self.workers[name] = ProcessWorker(
             name=self.name,
@@ -252,18 +273,25 @@ class ProcessManager:
             shared_dict=self.process_state[name],
         )
 
-    def remove(self, name):
+    def remove(self, name: str) -> Dict[str, Any]:
+        result = {"pid": os.getpid()}
         if name in self.workers:
             alive = self.workers[name].is_alive()
             if not alive:
                 self.workers[name].close()
                 del self.workers[name]
                 del self.process_state[name]
-                return {"message": f"Worker {name} removed"}
+                result.update({"state": "removed", "message": f"Worker {name} removed"})
             else:
-                return {"message": f"Worker {name} not removed as still running"}
+                result.update(
+                    {
+                        "state": "stillrunning",
+                        "message": f"Worker {name} not removed as still running",
+                    }
+                )
         else:
-            return {"message": f"worker {name} not found"}
+            result.update({"state": "notfound", "message": f"worker {name} not found"})
+        return result
 
     def execute(self, name):
         """Start the defined unit of work."""
@@ -284,7 +312,9 @@ pm = ProcessManager("main")
 
 def get_blueprint(pm):
     # global pm
-    worker_api = Blueprint("worker_api", __name__, template_folder="templates", static_folder="./")
+    worker_api = Blueprint(
+        "worker_api", __name__, template_folder="templates", static_folder="./"
+    )
 
     @worker_api.route("/")
     def index():
@@ -301,14 +331,10 @@ def get_blueprint(pm):
         unit = Unit(f"{name} {str(datetime.now())}", ifc)
         # pm = ProcessManager(name, process_state)
         context = Context("test", Event("eventid"))
-        if pm.define(name, context, unit):
+        result = pm.define(name, context, unit)
+        if result["state"] == ResultState.CREATED.name:
             pm.execute(name)
-        # run_basic_process(name, pm)
-        # print(f"PM : {pm} {pm.workers}")
-        # app_context[name] = pm.worker
-            return jsonify({"message": f"Unit of work {name} create and started."})
-        else:
-            return jsonify({"message": f"Unit of work {name} not started as one exists."})
+        return jsonify(result)
 
     # TODO Add a stop function to request/force a worker and unit of work to stop
 
@@ -329,9 +355,7 @@ def get_blueprint(pm):
         # sleep(0.1)
 
         # TODO Convert to json object for better M2M access
-        return jsonify(
-            {"message": f"Return State for {status}", "status": dict(status)}
-        )
+        return jsonify({"message": f"Return State for {name}", "status": dict(status)})
 
     @worker_api.route("/workers")
     def workers():
