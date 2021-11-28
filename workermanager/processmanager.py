@@ -8,16 +8,16 @@ Planning to clean this up and improve a async long running process.
 
 """
 
-import os
-from typing import Any, Dict
 import logging
+import os
+import threading
+from multiprocessing import Manager
+from typing import Any, Dict
 
 from workermanager import ResultState
-from workermanager.processworker import ProcessWorker
 from workermanager.context import Context
+from workermanager.processworker import ProcessWorker
 from workermanager.unit import Unit
-from multiprocessing import Manager
-
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +63,8 @@ class ProcessManager:
         status = {
             "nid": name,
             "manager": self.name,
-            "pid": os.getpid(),
+            "manager_pid": os.getpid(),
+            "threadid": threading.get_ident(),
             "alive": False,
             "defined": False,
         }
@@ -73,10 +74,11 @@ class ProcessManager:
                     "alive": self.workers[name].process.is_alive(),
                     "defined": True,
                     "status": self.workers[name].state,
+                    "pid": self.workers[name].process.pid,
                 }
             )
             status.update(dict(self.process_state[name]))
-        logger.warning("Get Status: %s", status)
+        logger.debug("Get Status: %s", status)
         return status
 
     def isdefined(self, name):
@@ -96,6 +98,7 @@ class ProcessManager:
             self._create_worker(name, context, unit)
         else:
             if not self.isrunning(name):
+                self.workers[name].process.close()
                 self._create_worker(name, context, unit)
             else:
                 result.update(
@@ -104,7 +107,7 @@ class ProcessManager:
                         "message": f"Unit of work {name} not started as one exists.",
                     }
                 )
-        logger.warning("Defined: %s", result)
+        logger.debug("Defined: %s", result)
         return result
 
     def _create_worker(self, name: str, context: Context, unit: Context):
@@ -155,7 +158,7 @@ class ProcessManager:
                     "message": f"Unit of work {name} create and started.",
                 }
             )
-        logger.warning("Execute: %s", result)
+        logger.debug("Execute: %s", result)
         return result
 
     def kill(self, name):
@@ -174,7 +177,7 @@ class ProcessManager:
                     "message": f"Unit of work {name} stopped (killed).",
                 }
             )
-        logger.warning("Kill: %s", result)
+        logger.debug("Kill: %s", result)
         return result
 
     def terminate(self, name):
@@ -194,5 +197,5 @@ class ProcessManager:
                     "message": f"Unit of work {name} stopped (terminate).",
                 }
             )
-        logger.warning("Terminate: %s", result)
+        logger.debug("Terminate: %s", result)
         return result

@@ -12,8 +12,8 @@ import os
 from multiprocessing import Process
 from multiprocessing.process import AuthenticationString
 from typing import Any, Dict
-from workermanager.context import Context
 
+from workermanager.context import Context
 from workermanager.unit import Unit
 
 logger = logging.getLogger(__name__)
@@ -29,6 +29,8 @@ class ProcessWorker(Process):
                                                 state of of the process to be
                                                 made visible.
 
+    Further information on the inherited class
+    https://docs.python.org/3/library/multiprocessing.html#multiprocessing.Process
     """
 
     name: str
@@ -95,4 +97,3 @@ class ProcessWorker(Process):
         """for unpickling"""
         state["_config"]["authkey"] = AuthenticationString(state["_config"]["authkey"])
         self.__dict__.update(state)
-

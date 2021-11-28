@@ -8,8 +8,8 @@ Planning to clean this up and improve a async long running process.
 
 """
 import logging
-from workermanager.event import Event
 
+from workermanager.event import Event
 
 logger = logging.getLogger(__name__)
 

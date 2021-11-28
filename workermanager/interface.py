@@ -8,8 +8,8 @@ Planning to clean this up and improve a async long running process.
 
 """
 import logging
-from flask import Flask, Blueprint, jsonify
 
+from flask import Blueprint, Flask, jsonify
 
 logger = logging.getLogger(__name__)
 

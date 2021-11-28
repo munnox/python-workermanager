@@ -38,8 +38,8 @@ Bit of Acsiiflow art https://asciiflow.com/#/
 └──────────────┘ └──────────────┘ └──────────────┘
 
 """
-from enum import Enum, auto, Flag
 import logging
+from enum import Enum, Flag, auto
 
 logger = logging.getLogger(__name__)
 
