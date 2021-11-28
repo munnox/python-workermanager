@@ -36,7 +36,9 @@
             <div>
                 <button v-on:click="start(name)">Execute</button>
                 <button v-on:click="getstate(name)">Get State</button>
-                <button v-on:click="remove(name)">Remove</button>
+                <button v-on:click="kill(name)">Kill</button>
+                <button v-on:click="terminate(name)">Terminate</button>
+                <!-- <button v-on:click="remove(name)">Remove</button> -->
             </div>
             <div>State:</div>
             <pre>{{ JSON.stringify(state, null, 2) }}</pre>
@@ -45,12 +47,20 @@
 
     <script>
         var WorkerState = {
-            DEFINED: 1,
-            RUNNING: 2,
+            DEFINED: "DEFINED",
+            RUNNING: "RUNNING",
         }
         var ResultState = {
-            CREATED: 0,
-            NOTCREATED: 1
+            CREATED: "CREATED",
+            NOTCREATED: "NOTCREATED",
+            STARTED: "STARTED",
+            NOTSTARTED: "NOTSTARTED",
+            STOPPED: "STOPPED",
+            NOTSTOPPED: "NOTSTOPPED",
+            KILLED: "KILLED",
+            NOTKILLED: "NOTKILLED",
+            TERMINATED: "TERMINATED",
+            NOTTERMINATED: "NOTTERMINATED",
         }
         const Counter = {
             data() {
@@ -102,14 +112,33 @@
                             // always executed
                         });
                 },
-                remove: function (name) {
+                kill: function (name) {
                     var self = this;
                     // Make a request for a user with a given ID
-                    axios.get(`/remove/${name}`)
+                    axios.get(`/kill/${name}`)
                         .then(function (response) {
                             // handle success
                             console.log(response);
                             self.state = response.data
+                            // self.state.
+                        })
+                        .catch(function (error) {
+                            // handle error
+                            console.log(error);
+                        })
+                        .then(function () {
+                            // always executed
+                        });
+                },
+                terminate: function (name) {
+                    var self = this;
+                    // Make a request for a user with a given ID
+                    axios.get(`/terminate/${name}`)
+                        .then(function (response) {
+                            // handle success
+                            console.log(response);
+                            self.state = response.data
+                            // self.state.
                         })
                         .catch(function (error) {
                             // handle error
